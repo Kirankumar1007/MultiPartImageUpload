@@ -1,0 +1,106 @@
+// Repo
+ Future<http.StreamedResponse?> createOrder(
+      List<PickedFile> data, Map<String, String> body) async {
+    // return await apiClient.postData(
+    //     AppConstants.updateProfileUri, data);
+    log("$body");
+
+    http.StreamedResponse? response;
+    try {
+      http.MultipartRequest request = http.MultipartRequest('POST',
+          Uri.parse('${AppConstants.baseUrl}${AppConstants.postOrdersUrl}'));
+      request.headers.addAll(<String, String>{
+        'Accept': 'application/json',
+        'Authorization': 'Bearer ${Get.find<AuthController>().getUserToken()}'
+      });
+      if (data.isNotEmpty) {
+        for (var element in data) {
+          File file = File(element.path);
+          // request.files.add(
+          //   http.MultipartFile(
+          //     'customized_printing_images[]',
+          //     file.readAsBytes().asStream(),
+          //     file.lengthSync(),
+          //     filename: file.path.split('/').last,
+          //   ),
+          // );
+          request.files.add(
+            await http.MultipartFile.fromPath(
+              'customized_printing_images[]',
+              file.path,
+            ),
+          );
+        }
+      }
+      request.fields.addAll(body);
+      log("${request.url}");
+
+      response = await request.send();
+    } catch (e) {
+      log('---- ${e.toString()} ----', name: "ERROR AT createOrder()");
+    }
+    return response!;
+  }
+-----------------------------------------------------------------
+
+// Get Controller
+
+ bool _isLoading = false;
+  PickedFile? pickedFileF;
+  PickedFile? pickedFileB;
+
+  Future<ResponseModel> createOrder({required int type}) async {
+    _isLoading = true;
+    update();
+    ResponseModel responseModel;
+    try {
+      log("response.body.toString()", name: "UserModel");
+      List<PickedFile> data = [];
+      if (pickedFileF != null && pickedFileB != null) {
+        data = [pickedFileB!, pickedFileF!];
+      }
+      Map<String, String> body = {
+        "user_id": Get.find<AuthController>().getUserID(),
+        "book_ids": orderIds,
+        "wallet_amount_used":
+            Get.find<AuthController>().profileData!.wallet.toString(),
+        "subtotal": subTotalAmmount.toString(),
+        "order_amount": orderAmount.toString(),
+        "paid_amount": paidAmount.toString(),
+        "delivery_charges": diliveryCharges.toString(),
+        "due_amount": dueAmount ?? "0".toString(),
+        "promocode_discount_amount": promoDiscount.toString(),
+        "payment_status": "0".toString(),
+        "customized_printing":
+            Get.find<BooksOrderController>().customizedEnable == false
+                ? "0"
+                : "1".toString(),
+        "part_payment": partPayment.toString(),
+        "part_payment_percentage": Get.find<AuthController>()
+            .profileData!
+            .partPaymentPercentage
+            .toString(),
+        "delivery_address_id": selectedAddress!.id!.toString(),
+        "type": type.toString()
+      };
+
+      http.StreamedResponse? response =
+          await booksOrderRepo.createOrder(data, body);
+      Map map = {};
+      log("${response?.statusCode}");
+
+      if (response != null) {
+        map = jsonDecode(await response.stream.bytesToString());
+        log("$map");
+        responseModel = ResponseModel(true, map["order_id"], map);
+      } else {
+        responseModel = ResponseModel(false, "error");
+      }
+    } catch (e) {
+      log('---- $e ----', name: "ERROR AT createOrder()");
+      responseModel = ResponseModel(false, "$e");
+    }
+    _isLoading = false;
+    update();
+    return responseModel;
+  }
